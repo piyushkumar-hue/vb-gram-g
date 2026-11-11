@@ -1,0 +1,2 @@
+name,description,category,subCategory,state,district,block,gramPanchayat,lat,lng,plannedProgress,actualProgress,status,expenditure,plannedStartDate,plannedEndDate,actualStartDate,actualEndDate
+DEMO ONLY - replace before import,synthetic example row not real work,Water Security,WAT-01,Madhya Pradesh,Jabalpur,Jabalpur,Barela,23.1815,79.9864,40,25,Proposed,0,2026-01-01,2026-12-31,,

@@ -1,0 +1,41 @@
+{
+  "name": "vb-gram-g-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "REST API for the VB-G RAM G rural development portal",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test",
+    "validate-catalogue": "node src/seed/validateCatalogue.js",
+    "import-catalogue": "node src/seed/importCatalogue.js",
+    "validate-geo": "node src/geo/validateGeo.js",
+    "process-geo": "node src/geo/processGeo.js",
+    "process-geo-level": "node src/geo/processGeoLevel.js",
+    "seed": "node src/seed/seedDemoData.js",
+    "seed-demo": "node src/seed/seedDemoData.js",
+    "clear-demo": "node src/seed/clearDemoData.js",
+    "create-admin": "node src/seed/createAdmin.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "csv-parse": "^7.0.3",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.12.1",
+    "multer": "^2.5.0"
+  },
+  "devDependencies": {
+    "@turf/boolean-point-in-polygon": "^7.2.0",
+    "@turf/boolean-valid": "^7.2.0",
+    "@turf/point-on-feature": "^7.2.0",
+    "@turf/simplify": "^7.2.0",
+    "geojson-polygon-self-intersections": "^1.2.2",
+    "mapshaper": "^0.7.98"
+  }
+}
