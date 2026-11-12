@@ -16,7 +16,10 @@
     "seed": "node src/seed/seedDemoData.js",
     "seed-demo": "node src/seed/seedDemoData.js",
     "clear-demo": "node src/seed/clearDemoData.js",
-    "create-admin": "node src/seed/createAdmin.js"
+    "create-admin": "node src/seed/createAdmin.js",
+    "import-locations": "node src/seed/importLocations.js",
+    "fetch-lgd-blocks": "node src/seed/fetchLgdBlocks.js",
+    "init-categories": "node src/seed/initializeCategories.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

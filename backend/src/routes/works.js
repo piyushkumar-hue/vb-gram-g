@@ -10,6 +10,8 @@ const Category = require('../models/Category');
 const FieldUpdate = require('../models/FieldUpdate');
 const Work = require('../models/Work');
 const WorkAudit = require('../models/WorkAudit');
+const { readLocationMaster, mergeLocationMaster } = require('../domain/locationMaster');
+const { fetchGramPanchayats } = require('../domain/fetchGramPanchayats');
 const { allowRoles, requireAuth } = require('../middleware/auth');
 const { rejectUnknownQueryParams } = require('../middleware/requestInput');
 const { getWorkStatusTransitionError } = require('../domain/workLifecycle');
@@ -166,6 +168,12 @@ router.use((request, response, next) => {
   const filteredList = request.method === 'GET' &&
     (request.path === '/' || request.path === '/export.csv');
   if (filteredList) return next();
+  if (request.method === 'GET' && request.path === '/locations/gram-panchayats') {
+    return rejectUnknownQueryParams(['state', 'district', 'block'])(request, response, next);
+  }
+  if (request.method === 'GET' && request.path === '/locations') {
+    return rejectUnknownQueryParams(['includeDemo'])(request, response, next);
+  }
   return rejectUnknownQueryParams()(request, response, next);
 });
 
@@ -485,10 +493,32 @@ function boundaryLocations() {
   return result;
 }
 
+// Query an LGD-linked block GP mapping only when the user selects a block.
+router.get('/locations/gram-panchayats', async (request, response) => {
+  const { state, district, block } = request.query;
+  if (![state, district, block].every((s) => typeof s === 'string' && s.trim() && s.length <= 150)) {
+    return response.status(400).json({ message: 'state, district and block are required.' });
+  }
+  // Prefer verified local administrative mappings. Never rely solely on a remote API.
+  const norm = (value) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const local = readLocationMaster()
+    .filter((row) => norm(row.state) === norm(state) && norm(row.district) === norm(district) && norm(row.block) === norm(block))
+    .map((row) => row.gramPanchayat).filter((name) => typeof name === 'string' && name.trim());
+  try {
+    const remote = await fetchGramPanchayats({ state, district, block });
+    return response.json({ data: [...new Set([...local, ...remote])].sort((a,b) => a.localeCompare(b)), source: 'local-and-remote' });
+  } catch (error) {
+    // Return verified local names even if LGD is down. If none exist, signal unavailable.
+    if (local.length) return response.json({ data: [...new Set(local)].sort((a,b) => a.localeCompare(b)), source: 'local', warning: 'Live directory unavailable' });
+    return response.status(503).json({ message: `Gram Panchayat directory unavailable: ${error.message}` });
+  }
+});
+
 router.get('/locations', async (request, response, next) => {
   try {
-    const validationError = validateWorkQuery(request.query, { pagination: false });
-    if (validationError) return response.status(400).json({ message: validationError });
+    if (request.query.includeDemo !== undefined && !['true', 'false'].includes(request.query.includeDemo)) {
+      return response.status(400).json({ message: 'includeDemo must be true or false.' });
+    }
     // The administrative dropdowns must not disappear when work filters match
     // no records. Only demo visibility controls which work-derived subdivisions
     // may be displayed.
@@ -503,6 +533,7 @@ router.get('/locations', async (request, response, next) => {
     for (const [state, districts] of boundaryLocations()) {
       states.set(state, new Map([...districts].map(([district]) => [district, new Map()])));
     }
+    mergeLocationMaster(states, readLocationMaster());
     for (const { _id: location } of records) {
       if (!location?.state || !location.district) continue;
       if (!states.has(location.state)) states.set(location.state, new Map());

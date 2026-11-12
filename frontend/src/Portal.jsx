@@ -119,7 +119,7 @@ function LoginScreen({ onLogin }) {
           {error && <div className="alert error" role="alert">{error}</div>}
           <button className="button primary full" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : null}{mode === 'login' ? 'Sign in to dashboard' : 'Create viewer account'}</button>
         </form>
-        <div className="login-foot"><ShieldCheck size={15} /> Secure access Â· role-protected data</div>
+        <div className="login-foot"><ShieldCheck size={15} /> Secure access · role-protected data</div>
       </section>
     </main>
   )
@@ -174,6 +174,9 @@ function Dashboard({ session, onLogout }) {
     periodTo: '',
   })
   const [locations, setLocations] = useState([])
+  const [remoteGPs, setRemoteGPs] = useState([])
+  const [gpError, setGpError] = useState('')
+  const [gpLoading, setGpLoading] = useState(false)
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, pages: 0 })
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -297,7 +300,20 @@ function Dashboard({ session, onLogout }) {
   const selectedDistrict = districtOptions.find((district) => district.name === filters.district)
   const blockOptions = selectedDistrict?.blocks || []
   const selectedBlock = blockOptions.find((block) => block.name === filters.block)
-  const gramPanchayatOptions = selectedBlock?.gramPanchayats || []
+  const gramPanchayatOptions = [...new Set([...(selectedBlock?.gramPanchayats || []), ...remoteGPs])].sort((a, b) => a.localeCompare(b))
+  useEffect(() => {
+    let active = true
+    setRemoteGPs([])
+    setGpError('')
+    if (!filters.state || !filters.district || !filters.block) return () => { active = false }
+    setGpLoading(true)
+    const params = new URLSearchParams({ state: filters.state, district: filters.district, block: filters.block })
+    api(`/api/works/locations/gram-panchayats?${params}`, {}, session.token)
+      .then((result) => { if (active) setRemoteGPs(result.data || []) })
+      .catch((err) => { if (active) setGpError(err.message) })
+      .finally(() => { if (active) setGpLoading(false) })
+    return () => { active = false }
+  }, [filters.state, filters.district, filters.block, session.token])
   const districtData = summary?.byDistrict || []
 
   const selectedCategory = categories.find((category) => category._id === form.category)
@@ -608,7 +624,7 @@ function Dashboard({ session, onLogout }) {
 
         <div className="page-wrap">
           <section className="page-heading" id="overview">
-            <div><span className="eyebrow">MONITORING OVERVIEW</span><h1>Good day, {session.user.name?.split(' ')[0]} <span className="wave">âœ³</span></h1><p>Hereâ€™s whatâ€™s happening across your rural development works.</p></div>
+            <div><span className="eyebrow">MONITORING OVERVIEW</span><h1>Good day, {session.user.name?.split(' ')[0]} <span className="wave">✳</span></h1><p>Here’s what’s happening across your rural development works.</p></div>
             <div className="heading-actions">
               {canManage && <button className="button secondary" onClick={() => { setError(''); setShowImport(true) }}><CloudUpload size={17} /> Import CSV</button>}
               {canManage && <button className="button primary" onClick={() => { setError(''); setEditingWork(null); setForm((current) => ({ ...current, category: categories[0]?._id || '', subCategory: categories[0]?.subcategories?.[0]?.code || '' })); setShowWorkForm(true) }}><Plus size={17} /> Add work</button>}
@@ -619,10 +635,10 @@ function Dashboard({ session, onLogout }) {
           {error && <div className="alert error" role="alert"><AlertTriangle size={17} /><span>{error}</span><button className="alert-retry" disabled={loading} onClick={loadData}>Retry</button><button onClick={() => setError('')} aria-label="Dismiss"><X size={16} /></button></div>}
 
           <section className="metrics-grid">
-            <MetricCard icon={ClipboardList} label="Total works" value={summaryKpis.total ?? 'â€”'} note="Across selected filters" accent="blue" />
-            <MetricCard icon={CheckCircle2} label="Completed" value={summaryKpis.completed ?? 'â€”'} note="Works marked completed" accent="green" />
-            <MetricCard icon={Activity} label="In progress" value={summaryKpis.inProgress ?? 'â€”'} note="Currently started" accent="orange" />
-            <MetricCard icon={AlertTriangle} label="Delayed" value={summaryKpis.delayed ?? 'â€”'} note="Behind planned progress" accent="red" />
+            <MetricCard icon={ClipboardList} label="Total works" value={summaryKpis.total ?? '—'} note="Across selected filters" accent="blue" />
+            <MetricCard icon={CheckCircle2} label="Completed" value={summaryKpis.completed ?? '—'} note="Works marked completed" accent="green" />
+            <MetricCard icon={Activity} label="In progress" value={summaryKpis.inProgress ?? '—'} note="Currently started" accent="orange" />
+            <MetricCard icon={AlertTriangle} label="Delayed" value={summaryKpis.delayed ?? '—'} note="Behind planned progress" accent="red" />
           </section>
 
           <section className="filter-bar" aria-label="Dashboard filters">
@@ -631,7 +647,7 @@ function Dashboard({ session, onLogout }) {
             <select value={filters.state} onChange={(event) => setFilter('state', event.target.value)} aria-label="Filter by state"><option value="">All states</option>{locations.map((state) => <option key={state.name}>{state.name}</option>)}</select>
             <select value={filters.district} onChange={(event) => setFilter('district', event.target.value)} aria-label="Filter by district" disabled={!filters.state}><option value="">All districts</option>{districtOptions.map((district) => <option key={district.name}>{district.name}</option>)}</select>
             <select value={filters.block} onChange={(event) => setFilter('block', event.target.value)} aria-label="Filter by block" disabled={!filters.district}><option value="">All blocks</option>{blockOptions.map((block) => <option key={block.name}>{block.name}</option>)}</select>
-            <select value={filters.gramPanchayat} onChange={(event) => setFilter('gramPanchayat', event.target.value)} aria-label="Filter by Gram Panchayat" disabled={!filters.block}><option value="">All Gram Panchayats</option>{gramPanchayatOptions.map((name) => <option key={name}>{name}</option>)}</select>
+            <select value={filters.gramPanchayat} onChange={(event) => setFilter('gramPanchayat', event.target.value)} aria-label="Filter by Gram Panchayat" disabled={!filters.block}><option value="">{gpLoading ? "Loading Gram Panchayats..." : "All Gram Panchayats"}</option>{gramPanchayatOptions.map((name) => <option key={name}>{name}</option>)}</select>{gpError && <span title={gpError} style={{ color: "#b45309", fontSize: 11 }}>GP directory unavailable</span>}
             <select value={filters.status} onChange={(event) => setFilter('status', event.target.value)} aria-label="Filter by status"><option value="">All statuses</option>{Object.keys(STATUS_COLORS).map((status) => <option key={status}>{status}</option>)}</select>
             <label className="period-filter">Planned start from<input type="date" value={filters.periodFrom} onChange={(event) => setFilter('periodFrom', event.target.value)} /></label>
             <label className="period-filter">to<input type="date" value={filters.periodTo} onChange={(event) => setFilter('periodTo', event.target.value)} /></label>
@@ -658,13 +674,13 @@ function Dashboard({ session, onLogout }) {
 
           <section className="geo-grid" id="geography">
             <article className="panel map-panel">
-              <div className="panel-heading"><div><h2>Works map</h2><p>Page {pagination.page} of {pagination.pages || 1} Â· {pagination.total} matching works</p>{showDemoData && <span className="demo-badge section-demo-badge">Demo data included</span>}</div><div className="map-heading-actions"><DemoDataToggle enabled={showDemoData} onChange={setShowDemoData} /><span className="panel-icon"><MapPin size={17} /></span></div></div>
+              <div className="panel-heading"><div><h2>Works map</h2><p>Page {pagination.page} of {pagination.pages || 1} · {pagination.total} matching works</p>{showDemoData && <span className="demo-badge section-demo-badge">Demo data included</span>}</div><div className="map-heading-actions"><DemoDataToggle enabled={showDemoData} onChange={setShowDemoData} /><span className="panel-icon"><MapPin size={17} /></span></div></div>
               <div className="map-frame">
                 <MapContainer center={[23.15, 79.95]} zoom={9} scrollWheelZoom={false} className="leaflet-map">
                   <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                   {filteredWorks.filter((work) => Number.isFinite(work.lat) && Number.isFinite(work.lng)).map((work) => (
                     <Circle key={work._id} center={[work.lat, work.lng]} radius={150} pathOptions={{ color: STATUS_COLORS[work.status] || '#527af2', fillColor: STATUS_COLORS[work.status] || '#527af2', fillOpacity: 0.8 }}>
-                      <Popup><strong>{work.name}</strong><br />{work.status} Â· {work.actualProgress}%<br />{work.location?.gramPanchayat}, {work.location?.district}</Popup>
+                      <Popup><strong>{work.name}</strong><br />{work.status} · {work.actualProgress}%<br />{work.location?.gramPanchayat}, {work.location?.district}</Popup>
                     </Circle>
                   ))}
                 </MapContainer>
@@ -672,7 +688,7 @@ function Dashboard({ session, onLogout }) {
               </div>
             </article>
             <article className="panel heat-panel">
-              <div className="panel-heading"><div><h2>India administrative choropleth</h2><p>India â†’ State â†’ District Â· select an area to drill down</p>{showDemoData && <span className="demo-badge section-demo-badge">Demo data included</span>}</div><div className="map-heading-actions"><DemoDataToggle enabled={showDemoData} onChange={setShowDemoData} /><span className="panel-icon"><Layers3 size={17} /></span></div></div>
+              <div className="panel-heading"><div><h2>India administrative choropleth</h2><p>India → State → District · select an area to drill down</p>{showDemoData && <span className="demo-badge section-demo-badge">Demo data included</span>}</div><div className="map-heading-actions"><DemoDataToggle enabled={showDemoData} onChange={setShowDemoData} /><span className="panel-icon"><Layers3 size={17} /></span></div></div>
               <div className="map-data-notice" role="note">
                 Boundaries cover all 36 states and union territories in the pinned state layer. Work records are only for areas entered or imported; seeded records are demo data, not nationwide coverage. Any reported-zero area is an explicit manual officer/admin declaration, not an official coverage feed.
               </div>
@@ -698,7 +714,7 @@ function Dashboard({ session, onLogout }) {
                       <p>Record an explicit zero-work report for {filters.periodFrom} to {filters.periodTo}. Existing planned-start work records for this district and period prevent submission.</p>
                     </div>
                     <button className="button secondary" onClick={reportZeroWorks} disabled={saving}>
-                      {saving ? 'Submittingâ€¦' : 'Report zero works'}
+                      {saving ? 'Submitting…' : 'Report zero works'}
                     </button>
                   </div>
                 )}
@@ -708,10 +724,10 @@ function Dashboard({ session, onLogout }) {
                     <button className={`district-row ${filters.state === district.state && filters.district === district.name ? 'active' : ''}`} onClick={() => { const selected = filters.state === district.state && filters.district === district.name; setFilters((current) => ({ ...current, state: selected ? '' : district.state, district: selected ? '' : district.name, block: '', gramPanchayat: '' })); setPage(1); setExpandedDistrict(expandedDistrict === district.key ? '' : district.key) }}>
                       <span className="district-swatch" style={{ background: district.progress === null ? '#eef0f2' : `rgba(46, 143, 102, ${0.15 + district.progress / 125})` }}><MapPin size={15} /></span>
                       <span className="district-name"><strong>{district.name}</strong><small>{district.count} works</small></span>
-                      <span className="district-progress">{district.progress === null ? 'â€”' : `${district.progress}%`}</span>
+                      <span className="district-progress">{district.progress === null ? '—' : `${district.progress}%`}</span>
                       {expandedDistrict === district.key ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </button>
-                    {expandedDistrict === district.key && <div className="drilldown">{district.blocks.map((block) => <div className="block-line" key={block.name}><strong>{block.name} Â· {block.progress === null ? 'â€”' : `${block.progress}%`}</strong>{block.gps.map((gp) => <span key={gp.name}>{gp.name}<b>{gp.progress === null ? 'â€”' : `${gp.progress}%`} ({gp.count})</b></span>)}</div>)}</div>}
+                    {expandedDistrict === district.key && <div className="drilldown">{district.blocks.map((block) => <div className="block-line" key={block.name}><strong>{block.name} · {block.progress === null ? '—' : `${block.progress}%`}</strong>{block.gps.map((gp) => <span key={gp.name}>{gp.name}<b>{gp.progress === null ? '—' : `${gp.progress}%`} ({gp.count})</b></span>)}</div>)}</div>}
                   </div>
                 )) : <p className="empty-small">No location data to display.</p>}
               </div>
@@ -724,26 +740,26 @@ function Dashboard({ session, onLogout }) {
               <div className="panel-heading"><div><h2>Delayed works for review</h2><p>Actual progress is behind the planned progress</p>{showDemoData && <span className="demo-badge section-demo-badge">Demo data included</span>}</div></div>
               <span className="delayed-count">{summary?.delayedTotal || 0} flagged</span>
             </div>
-            {summary?.delayedWorks?.length ? <div className="delayed-list">{summary.delayedWorks.slice(0, 6).map((work) => <div className="delayed-row" key={work.id}><span className="delayed-warning"><AlertTriangle size={15} /></span><div className="delayed-name"><strong>{work.name}</strong><small>{work.location?.gramPanchayat}, {work.location?.district} Â· {work.category?.name}</small></div><span className="delayed-progress">{work.actualProgress}% <small>actual</small></span><span className="delayed-progress planned">{work.plannedProgress}% <small>planned</small></span><StatusBadge status={work.status} /></div>)}</div> : <div className="empty-table">No delayed works in this view.</div>}
+            {summary?.delayedWorks?.length ? <div className="delayed-list">{summary.delayedWorks.slice(0, 6).map((work) => <div className="delayed-row" key={work.id}><span className="delayed-warning"><AlertTriangle size={15} /></span><div className="delayed-name"><strong>{work.name}</strong><small>{work.location?.gramPanchayat}, {work.location?.district} · {work.category?.name}</small></div><span className="delayed-progress">{work.actualProgress}% <small>actual</small></span><span className="delayed-progress planned">{work.plannedProgress}% <small>planned</small></span><StatusBadge status={work.status} /></div>)}</div> : <div className="empty-table">No delayed works in this view.</div>}
           </section>
 
           <section className="panel registry-panel" id="registry">
             <div className="registry-heading">
               <div><div className="panel-heading"><div><h2>Works registry</h2><p>Review and manage individual work records</p>{showDemoData && <span className="demo-badge section-demo-badge">Demo data included</span>}</div></div></div>
-              <div className="registry-tools"><label className="search-box"><Search size={16} /><input aria-label="Search works" maxLength={100} value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="Search works..." /></label><label className="sort-control">Sort <select aria-label="Sort works" value={sortBy} onChange={(event) => setSortBy(event.target.value)}><option value="newest">Newest</option><option value="name">Name Aâ€“Z</option><option value="progress-asc">Progress lowâ€“high</option><option value="progress-desc">Progress highâ€“low</option></select></label><span>{pagination.total} records</span></div>
+              <div className="registry-tools"><label className="search-box"><Search size={16} /><input aria-label="Search works" maxLength={100} value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="Search works..." /></label><label className="sort-control">Sort <select aria-label="Sort works" value={sortBy} onChange={(event) => setSortBy(event.target.value)}><option value="newest">Newest</option><option value="name">Name A–Z</option><option value="progress-asc">Progress low–high</option><option value="progress-desc">Progress high–low</option></select></label><span>{pagination.total} records</span></div>
             </div>
             <div className="table-scroll">
               <table><thead><tr><th>WORK NAME</th><th>CATEGORY</th><th>LOCATION</th><th>PROGRESS</th><th>STATUS</th><th>REVIEW</th><th>HISTORY</th>{canManage && <th>ACTIONS</th>}</tr></thead>
                 <tbody>{sortedWorks.map((work, index) => {
                   const Icon = CATEGORY_ICONS[categories.findIndex((category) => category._id === work.category?._id)] || Tractor
                   const delayed = work.actualProgress < work.plannedProgress
-                  return <tr key={work._id}><td><div className="work-title-cell"><span className={`work-icon icon-${index % 4}`}><Icon size={17} /></span><span><strong>{work.name}</strong><small>Updated {work.updatedAt ? new Date(work.updatedAt).toLocaleDateString() : 'â€”'}</small></span></div></td><td>{work.category?.name || 'â€”'}<small className="subcat">{work.subCategory}</small></td><td>{work.location?.gramPanchayat}<small className="subcat">{work.location?.district}</small></td><td><div className="progress-cell"><div className="progress-track"><i style={{ width: `${Math.max(0, Math.min(100, work.actualProgress))}%` }} /></div><span>{work.actualProgress}%</span></div><small className="subcat">of {work.plannedProgress}% planned</small></td><td><StatusBadge status={work.status} /></td><td>{delayed ? <span className="review-pill"><AlertTriangle size={13} />Delayed</span> : <span className="on-track">On track</span>}</td><td><button className="history-button" onClick={() => openFieldHistory(work)}><History size={14} /> View</button></td>{canManage && <td><div className="row-actions"><button aria-label={`Edit ${work.name}`} title="Edit work" onClick={() => openEditForm(work)}><Pencil size={14} /></button>{session.user.role === 'admin' && <button aria-label={`Delete ${work.name}`} title="Delete work" onClick={() => deleteWork(work)}><Trash2 size={14} /></button>}</div></td>}</tr>
+                  return <tr key={work._id}><td><div className="work-title-cell"><span className={`work-icon icon-${index % 4}`}><Icon size={17} /></span><span><strong>{work.name}</strong><small>Updated {work.updatedAt ? new Date(work.updatedAt).toLocaleDateString() : '—'}</small></span></div></td><td>{work.category?.name || '—'}<small className="subcat">{work.subCategory}</small></td><td>{work.location?.gramPanchayat}<small className="subcat">{work.location?.district}</small></td><td><div className="progress-cell"><div className="progress-track"><i style={{ width: `${Math.max(0, Math.min(100, work.actualProgress))}%` }} /></div><span>{work.actualProgress}%</span></div><small className="subcat">of {work.plannedProgress}% planned</small></td><td><StatusBadge status={work.status} /></td><td>{delayed ? <span className="review-pill"><AlertTriangle size={13} />Delayed</span> : <span className="on-track">On track</span>}</td><td><button className="history-button" onClick={() => openFieldHistory(work)}><History size={14} /> View</button></td>{canManage && <td><div className="row-actions"><button aria-label={`Edit ${work.name}`} title="Edit work" onClick={() => openEditForm(work)}><Pencil size={14} /></button>{session.user.role === 'admin' && <button aria-label={`Delete ${work.name}`} title="Delete work" onClick={() => deleteWork(work)}><Trash2 size={14} /></button>}</div></td>}</tr>
                 })}</tbody>
               </table>
               {!filteredWorks.length && <div className="empty-table">{loading ? 'Loading works...' : 'No works match these filters.'}</div>}
             </div>
             <div className="pagination-controls">
-              <span>Showing {pagination.total ? (pagination.page - 1) * pagination.limit + 1 : 0}â€“{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}</span>
+              <span>Showing {pagination.total ? (pagination.page - 1) * pagination.limit + 1 : 0}–{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total}</span>
               <div><button className="button secondary" disabled={loading || page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span>Page {pagination.page} of {pagination.pages || 1}</span><button className="button secondary" disabled={loading || page >= pagination.pages} onClick={() => setPage((current) => current + 1)}>Next</button></div>
             </div>
           </section>
@@ -754,11 +770,11 @@ function Dashboard({ session, onLogout }) {
               <button className="button primary" onClick={() => { setError(''); setShowUserForm(true) }}><Plus size={16} /> Add account</button>
             </div>
             <div className="table-scroll"><table><thead><tr><th>NAME</th><th>EMAIL</th><th>ROLE</th><th>JOINED</th></tr></thead><tbody>
-              {users.map((user) => <tr key={user._id}><td><div className="work-title-cell"><span className="avatar">{user.name?.slice(0, 1).toUpperCase()}</span><strong>{user.name}{isCurrentUser(user) && <small className="subcat">You</small>}</strong></div></td><td>{user.email}</td><td><select aria-label={`Role for ${user.name}`} className="role-select" value={user.role} disabled={isCurrentUser(user)} onChange={(event) => updateUserRole(user, event.target.value)}>{['admin', 'officer', 'viewer'].map((role) => <option key={role} value={role}>{role}</option>)}</select></td><td>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'â€”'}</td></tr>)}
+              {users.map((user) => <tr key={user._id}><td><div className="work-title-cell"><span className="avatar">{user.name?.slice(0, 1).toUpperCase()}</span><strong>{user.name}{isCurrentUser(user) && <small className="subcat">You</small>}</strong></div></td><td>{user.email}</td><td><select aria-label={`Role for ${user.name}`} className="role-select" value={user.role} disabled={isCurrentUser(user)} onChange={(event) => updateUserRole(user, event.target.value)}>{['admin', 'officer', 'viewer'].map((role) => <option key={role} value={role}>{role}</option>)}</select></td><td>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}</td></tr>)}
             </tbody></table>{!users.length && <div className="empty-table">{loading ? 'Loading accounts...' : 'No accounts found.'}</div>}</div>
           </section>}
 
-          <footer className="page-footer"><span>VB-G RAM G Â· Rural development monitoring</span><span>Phase 1 Â· Manual reporting</span></footer>
+          <footer className="page-footer"><span>VB-G RAM G · Rural development monitoring</span><span>Phase 1 · Manual reporting</span></footer>
         </div>
       </main>
 
@@ -779,14 +795,14 @@ function Dashboard({ session, onLogout }) {
           <label>Status<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>{Object.keys(STATUS_COLORS).map((status) => <option key={status}>{status}</option>)}</select></label>
           <label>Planned start<input type="date" required value={form.plannedStartDate} onChange={(event) => setForm({ ...form, plannedStartDate: event.target.value })} /></label>
           <label>Planned end<input type="date" required value={form.plannedEndDate} onChange={(event) => setForm({ ...form, plannedEndDate: event.target.value })} /></label>
-          <div className="modal-actions wide"><button type="button" className="button secondary" onClick={() => { setShowWorkForm(false); setEditingWork(null) }}>Cancel</button><button className="button primary" disabled={saving}>{saving ? 'Savingâ€¦' : editingWork ? 'Save changes' : 'Save work'}</button></div>
+          <div className="modal-actions wide"><button type="button" className="button secondary" onClick={() => { setShowWorkForm(false); setEditingWork(null) }}>Cancel</button><button className="button primary" disabled={saving}>{saving ? 'Saving…' : editingWork ? 'Save changes' : 'Save work'}</button></div>
         </form></section></div>}
 
       {showImport && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowImport(false) }}><section className="modal-card import-modal"><div className="modal-head"><div><span className="eyebrow">BULK IMPORT</span><h2>Import works from CSV</h2></div><button className="icon-button" onClick={() => setShowImport(false)} aria-label="Close"><X size={19} /></button></div>
         <div className="import-info"><FileSpreadsheet size={20} /><div><strong>Prepare your CSV file</strong><p>Use category names and sub-category codes from the seeded list. Import is all-or-nothing: invalid rows are reported and nothing is saved.</p></div></div>
         <button className="template-link" onClick={downloadTemplate}><ArrowDownToLine size={15} /> Download CSV header template</button>
         {error && <div className="alert error modal-error"><AlertTriangle size={16} /><span>{error}</span></div>}
-        <form onSubmit={importCsv}><label className="file-drop"><CloudUpload size={24} /><strong>Choose a .csv file</strong><span>Maximum file size 2 MB Â· up to 1,000 records</span><input name="csvFile" required type="file" accept=".csv,text/csv" /></label><div className="modal-actions"><button type="button" className="button secondary" onClick={() => setShowImport(false)}>Cancel</button><button className="button primary" disabled={saving}>{saving ? 'Validatingâ€¦' : 'Validate & import'}</button></div></form>
+        <form onSubmit={importCsv}><label className="file-drop"><CloudUpload size={24} /><strong>Choose a .csv file</strong><span>Maximum file size 2 MB · up to 1,000 records</span><input name="csvFile" required type="file" accept=".csv,text/csv" /></label><div className="modal-actions"><button type="button" className="button secondary" onClick={() => setShowImport(false)}>Cancel</button><button className="button primary" disabled={saving}>{saving ? 'Validating…' : 'Validate & import'}</button></div></form>
       </section></div>}
 
       {showUserForm && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowUserForm(false) }}><section className="modal-card user-modal"><div className="modal-head"><div><span className="eyebrow">ACCOUNT MANAGEMENT</span><h2>Create an account</h2></div><button className="icon-button" onClick={() => setShowUserForm(false)} aria-label="Close"><X size={19} /></button></div>
@@ -797,7 +813,7 @@ function Dashboard({ session, onLogout }) {
           <label>Email address<input required type="email" value={userForm.email} onChange={(event) => setUserForm({ ...userForm, email: event.target.value })} /></label>
           <label>Temporary password<input required type="password" minLength="12" maxLength="128" autoComplete="new-password" value={userForm.password} onChange={(event) => setUserForm({ ...userForm, password: event.target.value })} /><small>At least 12 characters</small></label>
           <label>Role<select value={userForm.role} onChange={(event) => setUserForm({ ...userForm, role: event.target.value })}><option value="officer">Officer</option><option value="viewer">Viewer</option><option value="admin">Admin</option></select></label>
-          <div className="modal-actions"><button type="button" className="button secondary" onClick={() => setShowUserForm(false)}>Cancel</button><button className="button primary" disabled={saving}>{saving ? 'Creatingâ€¦' : 'Create account'}</button></div>
+          <div className="modal-actions"><button type="button" className="button secondary" onClick={() => setShowUserForm(false)}>Cancel</button><button className="button primary" disabled={saving}>{saving ? 'Creating…' : 'Create account'}</button></div>
         </form>
       </section></div>}
 
@@ -808,7 +824,7 @@ function Dashboard({ session, onLogout }) {
           <div><span>Last updated</span><strong>{historyWork.updatedBy?.name || (historyWork.source === 'iot' ? 'IoT device' : 'Legacy record / unavailable')}</strong><small>{historyWork.updatedAt ? new Date(historyWork.updatedAt).toLocaleString() : 'Timestamp unavailable'}</small></div>
         </div>
         {historyError && <div className="alert error modal-error" role="alert"><AlertTriangle size={16} /><span>{historyError}</span><button className="alert-retry" onClick={() => openFieldHistory(historyWork)}>Retry</button></div>}
-        {historyLoading && !fieldUpdates.length ? <div className="empty-chart"><LoaderCircle size={20} className="spin" />Loading field updatesâ€¦</div> : fieldUpdates.length ? <><div className="history-list">{fieldUpdates.map((update) => <article className="history-entry" key={update._id}><span className="history-dot" /><div className="history-entry-body"><div className="history-entry-head"><strong>{update.progress}% reported</strong><StatusBadge status={update.status} /></div><p>{update.receivedAt ? new Date(update.receivedAt).toLocaleString() : 'Timestamp unavailable'} Â· {Number.isFinite(update.lat) && Number.isFinite(update.lng) ? `${update.lat.toFixed(5)}, ${update.lng.toFixed(5)}` : 'Coordinates unavailable'}</p>{safeEvidenceUrl(update.evidenceUrl) && <a href={safeEvidenceUrl(update.evidenceUrl)} target="_blank" rel="noreferrer">View evidence <ChevronRight size={13} /></a>}</div></article>)}</div>{historyPagination?.page < historyPagination?.pages && <button className="button secondary history-more" disabled={historyLoading} onClick={loadMoreHistory}>{historyLoading ? 'Loadingâ€¦' : 'Load more updates'}</button>}</> : !historyError ? <div className="empty-chart"><History size={22} /><span>No field or device updates have been submitted for this work yet.</span></div> : null}
+        {historyLoading && !fieldUpdates.length ? <div className="empty-chart"><LoaderCircle size={20} className="spin" />Loading field updates…</div> : fieldUpdates.length ? <><div className="history-list">{fieldUpdates.map((update) => <article className="history-entry" key={update._id}><span className="history-dot" /><div className="history-entry-body"><div className="history-entry-head"><strong>{update.progress}% reported</strong><StatusBadge status={update.status} /></div><p>{update.receivedAt ? new Date(update.receivedAt).toLocaleString() : 'Timestamp unavailable'} · {Number.isFinite(update.lat) && Number.isFinite(update.lng) ? `${update.lat.toFixed(5)}, ${update.lng.toFixed(5)}` : 'Coordinates unavailable'}</p>{safeEvidenceUrl(update.evidenceUrl) && <a href={safeEvidenceUrl(update.evidenceUrl)} target="_blank" rel="noreferrer">View evidence <ChevronRight size={13} /></a>}</div></article>)}</div>{historyPagination?.page < historyPagination?.pages && <button className="button secondary history-more" disabled={historyLoading} onClick={loadMoreHistory}>{historyLoading ? 'Loading…' : 'Load more updates'}</button>}</> : !historyError ? <div className="empty-chart"><History size={22} /><span>No field or device updates have been submitted for this work yet.</span></div> : null}
       </section></div>}
     </div>
   )
