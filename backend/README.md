@@ -77,3 +77,9 @@ The catalogue importer requires the explicit review flag and HTTPS `.gov.in`/`.n
 ## Pan-India boundary data
 
 Run `npm run validate-geo` and `npm run process-geo` to validate and process the pinned state/district boundary sources. The layers are loaded lazily in the GIS view. Source, licence, checksums, coverage and limitations are in [`../data/geo/PROVENANCE.md`](../data/geo/PROVENANCE.md); block/Gram Panchayat import requirements are in [`src/geo/README.md`](src/geo/README.md). Boundary layers are third-party redistributed data, not government-verified.
+
+## Operations Hub APIs
+
+See the root README for the added assignment, grievance, notification, evidence-link, finance, CSV report and explainable risk-insight modules. All routes are mounted at `/api/operations` and use the existing bearer-token authentication. Admin/officer write permissions are enforced in the API, not just hidden in the UI.
+
+Existing Work documents are compatible: `budget` and `amountReleased` are additive numeric fields defaulting to `0`; the existing `expenditure` field remains unchanged.

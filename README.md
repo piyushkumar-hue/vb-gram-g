@@ -108,3 +108,54 @@ The pinned layers contain 36 state/UT polygons and 735 district polygons; the so
 Pre-existing works from the former sample seed are deliberately left untouched and are not tagged `isDemo`; review them before presenting the registry as production data.
 
 # vg-
+
+## Operations Hub upgrade
+
+This release adds an authenticated Operations Hub while preserving the existing dashboard, works registry, GIS views, CSV workflows, field updates, and account roles.
+
+### Added modules
+
+- **Work assignments:** admins and officers can assign a work item to an admin/officer, set priority and due date, and track Pending / In progress / Completed status. The assignee receives an in-app notification.
+- **Grievance tracker:** authenticated users can submit citizen grievances with category and location. Admins/officers can update status; the submitting account receives a notification when the status changes.
+- **Notification centre:** users can view their notifications and mark them as read.
+- **Work evidence register:** admins/officers can attach HTTPS evidence links to a work item, with caption, stage, uploader and timestamp. This release stores links and metadata; it does not store uploaded image binaries.
+- **Financial monitoring:** work records now include `budget` and `amountReleased` in addition to the existing `expenditure`. Admins/officers can update these figures in the Operations Hub.
+- **Reports:** export a CSV work report or use the browser Print / Save PDF action.
+- **Risk insights:** a transparent rule-based screen flags overdue work and projects whose actual progress trails planned progress. It is not an AI model, does not predict outcomes, and does not verify site conditions.
+- **Responsive field workflow:** the Operations Hub uses responsive layouts for smaller screens; a native/offline mobile app and background sync are not included.
+
+### New API endpoints
+
+All endpoints below require a valid bearer token unless otherwise stated by the existing authentication middleware.
+
+| Method | Endpoint | Access |
+|---|---|---|
+| GET | `/api/operations/officers` | Admin / Officer |
+| GET, POST | `/api/operations/assignments` | Authenticated read; Admin / Officer create |
+| PATCH | `/api/operations/assignments/:id` | Assigned user, assigner or Admin |
+| GET, POST | `/api/operations/grievances` | Authenticated |
+| PATCH | `/api/operations/grievances/:id` | Admin / Officer |
+| GET | `/api/operations/notifications` | Own notifications |
+| PATCH | `/api/operations/notifications/:id/read` | Own notifications |
+| GET, POST | `/api/operations/works/:workId/evidence` | Authenticated read; Admin / Officer create |
+| PATCH | `/api/operations/works/:workId/finance` | Admin / Officer |
+| GET | `/api/operations/insights` | Authenticated |
+| GET | `/api/operations/reports/works.csv` | Authenticated |
+
+### Run locally
+
+1. Extract the ZIP.
+2. In `backend`, run `npm ci`, copy `.env.example` to `.env`, and configure MongoDB, JWT secret, client origin and other required environment values.
+3. In `backend`, run `npm run dev`.
+4. In a second terminal, enter `frontend`, run `npm ci`, configure `VITE_API_BASE_URL` in `.env` if the API is not served from the same origin, then run `npm run dev`.
+5. Open the Vite URL shown in the terminal and sign in with an existing account. Admins/officers see management actions; viewers have read-only assignment and finance access, but can submit grievances.
+
+No database reset is required. The two new financial fields default to zero on existing work documents and are populated when an authorized user edits them.
+
+### Production notes
+
+- Use HTTPS and a production MongoDB database with backups.
+- Evidence URLs should point to an approved HTTPS file store with access controls; avoid public links containing sensitive information.
+- Review grievance contact details and retention policy before production use.
+- CSV and browser-generated PDF reports contain the records currently included by the demo-data toggle.
+- For real AI recommendations, integrate a vetted model/service with explicit data governance, auditability and human review. The current risk indicators are deterministic rules only.

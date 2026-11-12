@@ -1,0 +1,31 @@
+VB-G RAM G — Corrected Integration Patch
+
+Based on uploaded VB-G-RAM-G-upgraded.zip plus the previous four-phase patch.
+
+FIX: Login now sends only email and password, while viewer registration sends name, email and password. This addresses the 400 "Request contains an unsupported field" response.
+
+Contains the earlier four-phase files: evidence upload, inspections, expenses, milestones, rule-based risk analysis, backup helper, and Operations Hub integration. This is NOT a production certification or an exhaustive repair of every possible issue.
+
+BACKUP: Run from ROOT (project folder):
+  Copy-Item -Path . -Destination ..\vb-gram-g-backup-before-corrected -Recurse
+
+INSTALL: Run from ROOT (project folder):
+  Expand-Archive -LiteralPath "$HOME\Downloads\VB_GRAM_G_CORRECTED_INTEGRATION_PATCH.zip" -DestinationPath . -Force
+
+BACKEND (separate terminal):
+  cd backend
+  npm install
+  npm test
+  npm run dev
+
+FRONTEND (separate terminal, from ROOT):
+  cd frontend
+  npm install
+  npm run build
+  npm run dev
+
+Test admin login with your reset password. Do not include the name field on login.
+Test Operations Hub > Enhanced monitoring using an admin/officer account.
+No database deletion or reseeding is required.
+
+Important: The original project may have changed since the uploaded ZIP. This patch is built from the uploaded ZIP and earlier patch, not from your live Windows folder. If you have made additional edits to any overwritten files, compare them before installing.

@@ -1,0 +1,18 @@
+const express=require('express');
+const mongoose=require('mongoose');
+const {requireAuth,allowRoles}=require('../middleware/auth');
+const Work=require('../models/Work');
+const ActivityLog=require('../models/ActivityLog');
+const PublicWork=require('../models/PublicWork');
+const Notification=require('../models/Notification');
+const router=express.Router();
+router.use(requireAuth);
+const managers=allowRoles('admin','officer');
+const valid=id=>mongoose.isValidObjectId(id);
+router.get('/audit',allowRoles('admin'),async(req,res,next)=>{try{const logs=await ActivityLog.find().populate('actor','name email').sort({at:-1}).limit(150).lean();res.json({logs});}catch(e){next(e)}});
+router.get('/analytics',async(req,res,next)=>{try{const match=req.query.includeDemo==='true'?{}:{isDemo:false};const works=await Work.find(match).select('name status budget expenditure amountReleased location plannedEndDate actualProgress plannedProgress isDemo').lean();const groups=new Map();const now=Date.now();for(const w of works){const key=`${w.location?.state||'Unknown'} / ${w.location?.district||'Unknown'}`;const g=groups.get(key)||{district:key,count:0,completed:0,delayed:0,budget:0,spent:0};g.count++;if(w.status==='Completed')g.completed++;if(w.status!=='Completed'&&w.plannedEndDate&&new Date(w.plannedEndDate).getTime()<now)g.delayed++;g.budget+=w.budget||0;g.spent+=w.expenditure||0;groups.set(key,g)}res.json({total:works.length,districts:[...groups.values()].sort((a,b)=>b.count-a.count).slice(0,50),generatedAt:new Date().toISOString()})}catch(e){next(e)}});
+router.get('/notifications/live',async(req,res,next)=>{try{const since=new Date(Date.now()-120000);const rows=await Notification.find({$and:[{$or:[{recipient:req.user._id},{recipient:null}]},{createdAt:{$gte:since}}]}).sort({createdAt:-1}).limit(20).lean();res.json({notifications:rows,checkedAt:new Date().toISOString()})}catch(e){next(e)}});
+router.get('/published',async(req,res,next)=>{try{const items=await PublicWork.find().populate('work','name status location plannedProgress actualProgress isDemo').sort({publishedAt:-1}).limit(100).lean();res.json({works:items.filter(x=>x.work&&!x.work.isDemo).map(x=>({id:x.work._id,name:x.work.name,status:x.work.status,location:x.work.location,plannedProgress:x.work.plannedProgress,actualProgress:x.work.actualProgress,publishedAt:x.publishedAt}))})}catch(e){next(e)}});
+router.post('/publish/:id',allowRoles('admin'),async(req,res,next)=>{try{if(!valid(req.params.id))return res.status(400).json({message:'Invalid work ID.'});const work=await Work.findById(req.params.id);if(!work)return res.status(404).json({message:'Work not found.'});if(work.isDemo)return res.status(400).json({message:'Demo works cannot be published.'});await PublicWork.updateOne({work:work._id},{$set:{publishedBy:req.user._id,publishedAt:new Date()}},{upsert:true});res.json({message:'Work published.'})}catch(e){next(e)}});
+router.delete('/publish/:id',allowRoles('admin'),async(req,res,next)=>{try{if(!valid(req.params.id))return res.status(400).json({message:'Invalid work ID.'});await PublicWork.deleteOne({work:req.params.id});res.json({message:'Work unpublished.'})}catch(e){next(e)}});
+module.exports=router;

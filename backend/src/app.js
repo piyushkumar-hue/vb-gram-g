@@ -9,7 +9,12 @@ const dashboardRoutes = require('./routes/dashboard');
 const fieldUpdateRoutes = require('./routes/fieldUpdates');
 const reportingCoverageRoutes = require('./routes/reportingCoverage');
 const workRoutes = require('./routes/works');
+const operationsRoutes = require('./routes/operations');
+const enhancementsRoutes = require('./routes/enhancements');
 const { writeRateLimit } = require('./middleware/authRateLimits');
+const advancedRoutes=require('./routes/advanced');
+const publicTransparencyRoutes=require('./routes/publicTransparency');
+const ActivityLog=require('./models/ActivityLog');
 
 const app = express();
 const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
@@ -29,6 +34,13 @@ app.use(
 );
 app.use(express.json({ limit: '1mb' }));
 app.use('/api', writeRateLimit);
+// Record successful authenticated writes without capturing passwords, bodies, or tokens.
+app.use('/api', (req,res,next)=>{
+  if(!['POST','PATCH','PUT','DELETE'].includes(req.method)||req.path.startsWith('/auth/'))return next();
+  res.on('finish',()=>{if(req.user&&res.statusCode>=200&&res.statusCode<300){ActivityLog.create({actor:req.user._id,method:req.method,path:req.path.slice(0,300),status:res.statusCode}).catch(e=>console.error('Audit write failed:',e.message));}});
+  next();
+});
+
 
 app.get('/', rejectUnknownQueryParams(), (request, response) => {
   response.json({
@@ -60,12 +72,16 @@ app.use('/api', (request, response, next) => {
   return next();
 });
 
+app.use('/api/public', publicTransparencyRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/works', workRoutes);
 app.use('/api/field-updates', fieldUpdateRoutes);
 app.use('/api/reporting-coverage', reportingCoverageRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/operations', operationsRoutes);
+app.use('/api/enhancements', enhancementsRoutes);
+app.use('/api/advanced', advancedRoutes);
 
 app.use((request, response) => {
   response.status(404).json({ message: 'Route not found.' });
@@ -77,7 +93,7 @@ app.use((error, request, response, next) => {
   if (error instanceof require('multer').MulterError) {
     const status = error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
     return response.status(status).json({
-      message: status === 413 ? 'CSV file must be 2 MB or smaller.' : 'Invalid file upload.',
+      message: status === 413 ? 'Upload must be 2 MB or smaller.' : 'Invalid file upload.',
     });
   }
   if (error.type === 'entity.parse.failed') {

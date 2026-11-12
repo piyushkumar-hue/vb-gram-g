@@ -8,6 +8,7 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
+    "backup": "node src/seed/backupDatabase.js",
     "validate-catalogue": "node src/seed/validateCatalogue.js",
     "import-catalogue": "node src/seed/importCatalogue.js",
     "validate-geo": "node src/geo/validateGeo.js",
