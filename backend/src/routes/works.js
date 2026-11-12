@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const { Readable } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
+const fs = require('node:fs');
+const path = require('node:path');
 const { parse } = require('csv-parse/sync');
 const Category = require('../models/Category');
 const FieldUpdate = require('../models/FieldUpdate');
@@ -458,48 +460,69 @@ router.post(
   }
 );
 
+// Administrative state/district choices are sourced from the bundled boundary
+// dataset. Blocks and Gram Panchayats are only known for recorded works.
+// Boundary names are reference labels, not government-verified LGD identifiers.
+const geoDirectory = path.resolve(__dirname, '../../../frontend/public/data/geo');
+let boundaryLocationsCache;
+function boundaryLocations() {
+  if (boundaryLocationsCache) return boundaryLocationsCache;
+  const states = JSON.parse(fs.readFileSync(path.join(geoDirectory, 'states.geojson'), 'utf8'));
+  const districts = JSON.parse(fs.readFileSync(path.join(geoDirectory, 'districts.geojson'), 'utf8'));
+  const result = new Map();
+  for (const feature of states.features || []) {
+    const name = feature.properties?.name;
+    if (typeof name === 'string' && name.trim()) result.set(name, new Map());
+  }
+  for (const feature of districts.features || []) {
+    const state = feature.properties?.stateName;
+    const district = feature.properties?.name;
+    if (typeof state !== 'string' || typeof district !== 'string' || !state.trim() || !district.trim()) continue;
+    if (!result.has(state)) result.set(state, new Map());
+    result.get(state).set(district, new Map());
+  }
+  boundaryLocationsCache = result;
+  return result;
+}
+
 router.get('/locations', async (request, response, next) => {
   try {
     const validationError = validateWorkQuery(request.query, { pagination: false });
     if (validationError) return response.status(400).json({ message: validationError });
+    // The administrative dropdowns must not disappear when work filters match
+    // no records. Only demo visibility controls which work-derived subdivisions
+    // may be displayed.
     const records = await Work.aggregate([
-      { $match: buildWorkFilter(request.query) },
-      {
-        $group: {
-          _id: {
-            state: '$location.state',
-            district: '$location.district',
-            block: '$location.block',
-            gramPanchayat: '$location.gramPanchayat',
-          },
-        },
-      },
-      { $sort: { '_id.state': 1, '_id.district': 1, '_id.block': 1, '_id.gramPanchayat': 1 } },
+      { $match: buildWorkFilter({ includeDemo: request.query.includeDemo }) },
+      { $group: { _id: {
+        state: '$location.state', district: '$location.district',
+        block: '$location.block', gramPanchayat: '$location.gramPanchayat',
+      } } },
     ]);
-
     const states = new Map();
+    for (const [state, districts] of boundaryLocations()) {
+      states.set(state, new Map([...districts].map(([district]) => [district, new Map()])));
+    }
     for (const { _id: location } of records) {
-      if (!location.state || !location.district || !location.block || !location.gramPanchayat) continue;
+      if (!location?.state || !location.district) continue;
       if (!states.has(location.state)) states.set(location.state, new Map());
       const districts = states.get(location.state);
       if (!districts.has(location.district)) districts.set(location.district, new Map());
+      if (!location.block || !location.gramPanchayat) continue;
       const blocks = districts.get(location.district);
       if (!blocks.has(location.block)) blocks.set(location.block, new Set());
       blocks.get(location.block).add(location.gramPanchayat);
     }
-
-    return response.json({
-      data: [...states].map(([name, districts]) => ({
-        name,
-        districts: [...districts].map(([districtName, blocks]) => ({
-          name: districtName,
-          blocks: [...blocks].map(([blockName, gramPanchayats]) => ({
-            name: blockName,
-            gramPanchayats: [...gramPanchayats],
-          })),
+    return response.json({ data: [...states].sort(([a], [b]) => a.localeCompare(b)).map(([name, districts]) => ({
+      name,
+      districts: [...districts].sort(([a], [b]) => a.localeCompare(b)).map(([districtName, blocks]) => ({
+        name: districtName,
+        blocks: [...blocks].sort(([a], [b]) => a.localeCompare(b)).map(([blockName, gramPanchayats]) => ({
+          name: blockName,
+          gramPanchayats: [...gramPanchayats].sort((a, b) => a.localeCompare(b)),
         })),
       })),
-    });
+    })) });
   } catch (error) {
     return next(error);
   }
